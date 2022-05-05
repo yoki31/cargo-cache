@@ -18,6 +18,8 @@ jobs:
       matrix:
         build:
           [
+            linux-msrv-release,
+            linux-msrv-debug,
             linux-nightly-release,
             linux-nightly-debug,
             linux-stable-release,
@@ -30,6 +32,15 @@ jobs:
             windows-nightly-debug,
           ]
         include:
+          - build: linux-msrv-release
+            os: ubuntu-latest
+            toolchain: 1.56
+            release: true
+          - build: linux-msrv-debug
+            os: ubuntu-latest
+            toolchain: 1.56
+            debug: true
+
           - build: linux-nightly-release
             os: ubuntu-latest
             toolchain: nightly
@@ -148,6 +159,8 @@ jobs:
         run: cargo cache --info
       - name: run "cargo cache --list-dirs"
         run: cargo cache --list-dirs
+      - name: run "cargo cache verify"
+        run: cargo cache verify
       - name: run "cargo cache --keep-duplicate-crates 10 --dry-run"
         run: cargo cache --keep-duplicate-crates 10 --dry-run
       - name: run "cargo cache --keep-duplicate-crates 1  --dry-run"

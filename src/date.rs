@@ -176,7 +176,10 @@ pub(crate) fn remove_files_by_dates(
         (None, Some(younger)) => AgeRelation::FileYoungerThanDate(younger),
         (Some(older), None) => AgeRelation::FileOlderThanDate(older),
         (Some(_older), Some(_younger)) => {
-            unreachable!("passing both, --remove-if-{older,younger}-than was temporarily disabled!")
+            unreachable!(
+                "{}",
+                "passing both, --remove-if-{older,younger}-than was temporarily disabled!"
+            )
         } // (Some(older), Some(younger)) => DateComparison::OlderOrYounger(older, younger),
     };
 
@@ -270,7 +273,7 @@ mod libtests {
 
     #[test]
     fn parse_dates() {
-        assert!(parse_date(&String::new()).is_err());
+        assert!(parse_date("").is_err());
         assert!(parse_date(&String::from("a")).is_err());
 
         assert!(parse_date(&String::from("01.01:2002")).is_err());

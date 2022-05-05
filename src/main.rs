@@ -49,6 +49,9 @@
     clippy::unnecessary_wraps,
     clippy::unnested_or_patterns,
 //   clippy::wildcard_enum_match_arm // too many FPS for _ => unreachable!()
+    clippy::index_refutable_slice,
+    clippy::return_self_not_must_use,
+    // clippy::string_slice, // fixme!
 )]
 // suppress these warnings:
 // #![allow(clippy::redundant_pub_crate)] // conflicts with unreachable_pub
@@ -74,6 +77,7 @@ cfg_if::cfg_if! {
         mod top_items_summary;
         mod date;
         mod clean_unref;
+        mod verify;
 
         // use
         use crate::cache::caches::{Cache, RegistrySuperCache};
@@ -88,6 +92,7 @@ cfg_if::cfg_if! {
         use crate::top_items_summary::*;
         use crate::clean_unref::*;
         use crate::cli::{CargoCacheCommands};
+        //use crate::verify;
     }
 }
 
@@ -110,7 +115,7 @@ fn main() {
     let config_enum = cli::clap_to_enum(config);
 
     // handle hidden "version" subcommand
-    if config.is_present("version") {
+    if config.is_present("version") || matches!(config_enum, CargoCacheCommands::Version) {
         println!("cargo-cache {}", cli::get_version());
         process::exit(0);
     }
@@ -465,6 +470,36 @@ fn main() {
         CargoCacheCommands::OnlyDryRun => {
             if !size_changed {
                 eprintln!("Warning: there is nothing to be dry run!");
+            }
+        }
+        CargoCacheCommands::Verify {
+            clean_corrupted,
+            dry_run,
+        } => {
+            println!("Verifying cache, this may take some time...\n");
+            if let Err(failed_verifications) = verify::verify_crates(&mut registry_sources_caches) {
+                eprintln!("\n");
+                failed_verifications
+                    .iter()
+                    .for_each(|diff| println!("{}", diff.details()));
+                eprintln!(
+                    "\nFound {} possible corrupted sources.",
+                    failed_verifications.len()
+                );
+
+                if clean_corrupted {
+                    verify::clean_corrupted(
+                        &mut registry_sources_caches,
+                        &failed_verifications,
+                        dry_run,
+                    );
+                } else {
+                    println!("Hint: use `cargo cache verify --clean-corrupted` to remove them.");
+                }
+
+                std::process::exit(1)
+            } else {
+                std::process::exit(0);
             }
         }
         _ => (),

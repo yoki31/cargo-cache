@@ -1,6 +1,6 @@
 [package]
 name = "cargo-cache"
-version = "0.7.0"
+version = "0.8.2"
 authors = ["Matthias Krüger <matthias.krueger@famsik.de>"]
 description = "Manage cargo cache ($CARGO_HOME or ~/.cargo/), show sizes and remove directories selectively"
 homepage = "https://github.com/matthiaskrgr/cargo-cache"
@@ -15,9 +15,10 @@ resolver = "2"
 rust-version = "1.56"
 
 [features]
-default = ["cargo_metadata", "chrono", "clap", "dirs-next", "git2", "humansize", "rayon", "regex", "rustc_tools_util", "walkdir"]
+default = ["cargo_metadata", "chrono", "clap", "dirs-next", "git2", "humansize", "rayon", "regex", "rustc_tools_util", "walkdir", "tar", "flate2", "vendored-libgit"]
 bench = [] # run benchmarks
 ci-autoclean = [] # minimal implementation that builds fast for CI
+vendored-libgit = ["git2/vendored-libgit2"]
 offline_tests =  [] # only run tests that do not require internet connection
 # some details: https://github.com/NixOS/nixpkgs/pull/77310
 [dependencies]
@@ -31,10 +32,13 @@ cfg-if = { version = "1.0.0" } # if cfg(..)  { ...  }
 chrono = { version = "0.4.19", optional = true } # compare dates etc
 
 # https://github.com/kbknapp/clap-rs
-clap = { version = "2.33.3", features = ["wrap_help"], optional = true }  # cmdline arg parsing
+clap = {version = "3.0.0", features = ["wrap_help"], optional = true}# cmdline arg parsing
 
 # https://github.com/xdg-rs/dirs
 dirs-next = { version = "2.0.0", optional = true } # get cache dirs to look for sccache cache
+
+# https://github.com/rust-lang/flate2-rs
+flate2 = {version = "1.0.22", optional = true}# look into gzs
 
 # https://github.com/alexcrichton/git2-rs
 git2 = { version = "0.13.22", default-features = false, optional = true, features = ["vendored-libgit2"] } # check if repo is git repo
@@ -56,6 +60,12 @@ remove_dir_all = { version = "0.7.0" } # remove_dir_all on windows
 
 # https://github.com/rust-lang/rust-clippy/tree/master/rustc_tools_util
 rustc_tools_util = { version = "0.2.0", optional = true } # git version information
+
+# https://github.com/alexcrichton/tar-rs
+tar = { version = "0.4.38", optional = true } # extract tars
+
+# https://github.com/unicode-rs/unicode-normalization
+unicode-normalization = { version = "0.1.19" } # handle nfc paths
 
 # https://github.com/BurntSushi/walkdir
 walkdir = { version = "2.3.1", optional = true } # walk content of directory/CARGO_HOME recursively

@@ -7,6 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
@@ -77,14 +78,16 @@ pub(crate) fn binary_stats(path: &Path, limit: u32, bin_cache: &mut bin::BinaryC
         return output;
     }
 
-    output.push_str(&format!(
-        "\nSummary of: {} ({} total)\n",
+    writeln!(
+        output,
+        "\nSummary of: {} ({} total)",
         path.display(),
         bin_cache
             .total_size()
             .file_size(file_size_opts::DECIMAL)
             .unwrap()
-    ));
+    )
+    .unwrap();
 
     let collections_vec = bininfo_list_from_path(bin_cache); // this is already sorted
 
@@ -179,7 +182,7 @@ mod bininfo_struct {
         v.sort_by_key(|b| b.size);
         let mut order_string = String::new();
         for bi in v {
-            order_string.push_str(&format!("{:?}", bi));
+            write!(order_string, "{:?}", bi).unwrap();
         }
         println!("{}", order_string);
         let mut wanted = String::new();
@@ -213,7 +216,7 @@ mod bininfo_struct {
         v.par_sort_by_key(|b| b.size);
         let mut order_string = String::new();
         for bi in v {
-            order_string.push_str(&format!("{:?}", bi));
+            write!(order_string, "{:?}", bi).unwrap();
         }
         println!("{}", order_string);
         let mut wanted = String::new();

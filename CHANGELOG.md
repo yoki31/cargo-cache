@@ -3,6 +3,45 @@
 
 ```
 
+## Version 0.8.2 (b7bf4f4)
+```
+Fix build with nightly rustc 1.60.0-nightly (734368a20 2022-02-07)
+unreachable!("{}") is no longer accepted: https://github.com/rust-lang/rust/issues/92137
+
+Build: add "vendored-libgit" feature that enables libgit2 vendoring (statically link libgit2 into cargo-cache instead of linking agaist the system libgit2)
+The feature is on by default but it can be skipped (using --no-default-features) by distributors who would like cargo-cache to link against system libgit2
+```
+
+## Version 0.8.1 (1fcffbb)
+```
+Fix: 'verify' incorrectly determines paths as missing due to different unicode representations. (#113 / #114)
+
+New deps:
+	unicode-normalization 0.1.19
+```
+
+## Version 0.8.0 (e36f9df)
+```
+Add new subcommand "verify"
+cargo cache verify  tries to check corrupted (modified) crate sources
+The command looks into the .crate archive and compares the contained files with the extracted sources.
+If we find files that are not the same size in both places, the source is considered corrupted.
+cargo cache verify --clean-corrupted will automatically remove the corrupted sources. (supports --dry-run as well)
+
+Upgrade from clap 2.33.3 to 3.0.0
+If you notice any change in behaviour that is not listed here, please let me know!
+
+Cli: removed "cargo cache query -h" for --human-readable because it was ambiguous with -h of --help.
+
+Cli: fix bugs where I was implementing a subcommand cargo-cache foo but then actually checking for it as an argument cargo ceche --foo
+or vice versa.
+Found during migration to clap v3
+
+New deps:
+	flate2 1.0.22
+	tar 0.4.38
+```
+
 ## Version 0.7.0 (ab0166b)
 ````
 Fully remove -d shorthand for --dry-run, use -n instead (#97)
