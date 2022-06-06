@@ -49,7 +49,7 @@ humansize = { version = "1.1.0", optional = true } # convert digits of bytes to 
 rayon = { version = "1.5.0", optional = true } # parallelize iterators
 
 # https://github.com/rust-lang/regex
-regex = { version = "1.4.2", optional = true } # use regex for matching
+regex = { version = "1.5.5", optional = true } # use regex for matching
 
 # https://github.com/XAMPPRocky/remove_dir_all
 remove_dir_all = { version = "0.7.0" } # remove_dir_all on windows
