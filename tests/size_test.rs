@@ -21,13 +21,25 @@ use walkdir::WalkDir;
 #[test]
 #[cfg_attr(feature = "offline_tests", ignore)]
 fn build_and_check_size_test() {
+    let cargo_v = Command::new("cargo").arg("--version").output().unwrap();
+    let version_output = String::from_utf8_lossy(&cargo_v.stdout).to_string();
+
+    //https://github.com/rust-lang/cargo/pull/10553
+    let disallowed_versions = ["1.57", "1.60", "1.61", "1.62", "1.68", "1.69"];
+    if disallowed_versions
+        .iter()
+        .any(|version| version_output.contains(version))
+    {
+        return;
+    }
+
     // move into the directory of our dummy crate
     // set a fake CARGO_HOME and build the dummy crate there
     let crate_path = PathBuf::from("tests/size_test/");
     let fchp = "target/fake_cargo_home"; // fake cargo_home path
     let status = Command::new("cargo")
         .arg("fetch")
-        .current_dir(&crate_path)
+        .current_dir(crate_path)
         .env("CARGO_HOME", "../../target/fake_cargo_home")
         .output();
     // make sure the build succeeded
@@ -70,7 +82,7 @@ fn build_and_check_size_test() {
     );
 
     // run it on the fake cargo cache dir
-    let cargo_cache = Command::new(bin_path()).env("CARGO_HOME", &fchp).output();
+    let cargo_cache = Command::new(bin_path()).env("CARGO_HOME", fchp).output();
     assert!(cargo_cache.is_ok(), "cargo cache failed to run");
     let cc_output = String::from_utf8_lossy(&cargo_cache.unwrap().stdout).into_owned();
     // we need to get the actual path to fake cargo home dir and make it an absolute path
@@ -83,7 +95,7 @@ fn build_and_check_size_test() {
       0 installed binaries:                  0  B
       Registry:                         103.68 MB
         Registry index:                 101.23 MB
-        4 crate archives:               407.74 KB
+        4 crate archives:               407.74 kB
         4 crate source checkouts:         2.04 MB
       Git db:                                0  B
         0 bare git repos:                    0  B
@@ -94,8 +106,8 @@ fn build_and_check_size_test() {
         "Total:                     .* MB
   0 installed binaries:         .*  B
   Registry:                     .* MB
-    Registry index:             .* MB
-   .. crate archives:           .* KB
+    Registry index:             .* [kM]B
+   .. crate archives:           .* kB
    .. crate source checkouts:   .* MB
   Git db:                       .* 0  B
     0 bare git repos:           .* 0  B
@@ -106,8 +118,6 @@ fn build_and_check_size_test() {
 
     assert!(
         regex.clone().unwrap().is_match(&cc_output),
-        "regex: {:?}, cc_output: {}",
-        regex,
-        cc_output
+        "regex: {regex:?}, cc_output: {cc_output}",
     );
 }

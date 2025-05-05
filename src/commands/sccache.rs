@@ -14,7 +14,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use chrono::prelude::*;
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, DECIMAL};
 use walkdir::WalkDir;
 
 use crate::library;
@@ -123,7 +123,7 @@ pub(crate) fn sccache_stats() -> Result<(), library::Error> {
             // calculate total file size sum for the summary
             total_size += total_size_bytes;
 
-            let size_human_readable = total_size_bytes.file_size(file_size_opts::DECIMAL).unwrap();
+            let size_human_readable = total_size_bytes.format_size(DECIMAL);
 
             let percentage = percentage_of_as_string(total_size_bytes, total_size_entire_cache);
 
@@ -168,13 +168,13 @@ pub(crate) fn sccache_stats() -> Result<(), library::Error> {
     table_vec.push(vec![
         number_of_files.to_string(),
         String::new(),
-        total_size.file_size(file_size_opts::DECIMAL).unwrap(),
+        total_size.format_size(DECIMAL),
         "100 %".into(),
     ]);
 
     // generate the table and print it
     let table = format_table(&table_vec, 1); // need so strip whitespaces added by the padding
     let table_trimmed = table.trim();
-    println!("{}", table_trimmed);
+    println!("{table_trimmed}");
     Ok(())
 }

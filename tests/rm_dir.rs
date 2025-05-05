@@ -7,6 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![allow(clippy::assertions_on_result_states)] // not that useful imo
+
 #[path = "../src/test_helpers.rs"]
 mod test_helpers;
 
@@ -17,7 +19,7 @@ use std::process::Command;
 use walkdir::WalkDir;
 
 fn dir_size(path: &Path) -> u64 {
-    WalkDir::new(&path)
+    WalkDir::new(path)
         .into_iter()
         .map(|e| e.unwrap().path().to_owned())
         .filter(|f| f.exists()) // avoid broken symlinks
@@ -37,7 +39,7 @@ fn remove_dirs() {
 
     let root_dir = std::env::current_dir();
 
-    println!("cwd: {:?}", root_dir);
+    println!("cwd: {root_dir:?}");
     // move into the directory of our dummy crate
     // set a fake CARGO_HOME and build the dummy crate there
     let crate_path = PathBuf::from("tests/all_cargo_home_paths_are_known/testcrate");
@@ -65,8 +67,7 @@ fn remove_dirs() {
     assert!(
         PathBuf::from(&fchp).is_dir(),
         "fake cargo home was not created!:
-        {:?}",
-        fchp
+        {fchp:?}"
     );
     println!("DOING");
 
@@ -81,18 +82,18 @@ fn remove_dirs() {
         "registry",
         "all",
     ] {
-        let dir = format!("target/rm_dir_cargohomes/{}", param);
+        let dir = format!("target/rm_dir_cargohomes/{param}");
         assert!(std::fs::create_dir_all(&dir).is_ok());
 
         let tmp_cargo_home = tempfile::tempdir_in(&dir).unwrap();
-        println!("{:?}", tmp_cargo_home);
+        println!("{tmp_cargo_home:?}");
 
         assert!(tmp_cargo_home.path().is_dir());
         // create a new cargo home as temporary directory
 
         let copy_options = dir::CopyOptions::new();
         let source = cargo_home_src.clone();
-        println!("SOURCE: {:?}, DEST: {:?}", source, tmp_cargo_home);
+        println!("SOURCE: {source:?}, DEST: {tmp_cargo_home:?}");
         fs_extra::copy_items(&[source], &tmp_cargo_home, &copy_options).unwrap();
         // run cargo cache and --rm-dir the cache and make sure cargo cache does not crash
 
@@ -101,8 +102,8 @@ fn remove_dirs() {
         println!("CARGO HOME: {:?}", tmp_cargo_home.path());
 
         let cargo_cache = Command::new(bin_path())
-            .env("CARGO_HOME", &tmp_cargo_home.path())
-            .args(&["--remove-dir", param])
+            .env("CARGO_HOME", tmp_cargo_home.path())
+            .args(["--remove-dir", param])
             .output();
         assert!(cargo_cache.is_ok(), "cargo cache failed to run");
         assert!(
@@ -115,7 +116,7 @@ fn remove_dirs() {
 
         let cargo_cache = Command::new(bin_path())
             .env("CARGO_HOME", &cargo_home_path)
-            .args(&["--remove-dir", param])
+            .args(["--remove-dir", param])
             .output();
         assert!(cargo_cache.is_ok(), "cargo cache failed to run");
         assert!(

@@ -54,12 +54,15 @@ fn parse_date(date: &str) -> Result<NaiveDateTime, Error> {
                     ));
                 };
 
-            nd.and_hms(now.hour(), now.minute(), now.second())
+            match nd.and_hms_opt(now.hour(), now.minute(), now.second()) {
+                Some(nd) => nd,
+                None => return Err(Error::DateParseFailure(format!("{now:?}"), "date".into())),
+            }
 
         // xx:xx:xx => hh::mm::ss
         } else if Regex::new(r"^\d{2}:\d{2}:\d{2}$").unwrap().is_match(date) {
             // probably a time
-            let today = Local::today();
+            let today = Local::now();
 
             let split: Result<Vec<u32>, _> = date.split(':').map(str::parse).collect();
             let split = match split {
@@ -78,9 +81,17 @@ fn parse_date(date: &str) -> Result<NaiveDateTime, Error> {
                 ));
             };
 
-            nd.and_hms(split[0], split[1], split[2])
+            match nd.and_hms_opt(split[0], split[1], split[2]) {
+                Some(nd) => nd,
+                None => {
+                    return Err(Error::DateParseFailure(
+                        format!("{}:{}:{}", split[0], split[1], split[2]),
+                        "date".into(),
+                    ))
+                }
+            }
         } else {
-            return Err(Error::DateParseFailure(date.into(), "a valid date".into()));
+            return Err(Error::DateParseFailure(date.into(), String::new()));
         }
     };
     Ok(date_to_compare)
@@ -176,7 +187,10 @@ pub(crate) fn remove_files_by_dates(
         (None, Some(younger)) => AgeRelation::FileYoungerThanDate(younger),
         (Some(older), None) => AgeRelation::FileOlderThanDate(older),
         (Some(_older), Some(_younger)) => {
-            unreachable!("passing both, --remove-if-{older,younger}-than was temporarily disabled!")
+            unreachable!(
+                "{}",
+                "passing both, --remove-if-{older,younger}-than was temporarily disabled!"
+            )
         } // (Some(older), Some(younger)) => DateComparison::OlderOrYounger(older, younger),
     };
 
@@ -204,8 +218,8 @@ pub(crate) fn remove_files_by_dates(
             "dry-run: would delete {} items that are {}...",
             filtered_files.len(),
             match date_comp {
-                AgeRelation::FileYoungerThanDate(date) => format!("younger than {}", date),
-                AgeRelation::FileOlderThanDate(date) => format!("older than {}", date),
+                AgeRelation::FileYoungerThanDate(date) => format!("younger than {date}"),
+                AgeRelation::FileOlderThanDate(date) => format!("older than {date}"),
                 AgeRelation::None => unreachable!(
                     "DateComparisonOlder and Younger or None not supported right now (dry run)"
                 ),
@@ -217,8 +231,8 @@ pub(crate) fn remove_files_by_dates(
             "Deleting {} items that are {}...",
             filtered_files.len(),
             match date_comp {
-                AgeRelation::FileYoungerThanDate(date) => format!("younger than {}", date),
-                AgeRelation::FileOlderThanDate(date) => format!("older than {}", date),
+                AgeRelation::FileYoungerThanDate(date) => format!("younger than {date}"),
+                AgeRelation::FileOlderThanDate(date) => format!("older than {date}"),
                 AgeRelation::None => unreachable!(
                     "DateComparisonOlder and Younger or None not supported right now (no dry run)"
                 ),
@@ -270,7 +284,7 @@ mod libtests {
 
     #[test]
     fn parse_dates() {
-        assert!(parse_date(&String::new()).is_err());
+        assert!(parse_date("").is_err());
         assert!(parse_date(&String::from("a")).is_err());
 
         assert!(parse_date(&String::from("01.01:2002")).is_err());
@@ -319,19 +333,16 @@ mod libtests {
     }
 
     #[test]
-    #[should_panic(expected = "invalid time")]
     fn parse_dates_panic1() {
         assert!(parse_date(&String::from("24:00:00")).is_err());
     }
 
     #[test]
-    #[should_panic(expected = "invalid time")]
     fn parse_dates_panic2() {
         assert!(parse_date(&String::from("24:30:24")).is_err());
     }
 
     #[test]
-    #[should_panic(expected = "invalid time")]
     fn parse_dates_panic3() {
         assert!(parse_date(&String::from("30:30:24")).is_err());
     }

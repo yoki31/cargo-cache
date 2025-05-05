@@ -1,6 +1,76 @@
 ## Git
 ```
+Fix --keep-duplicate-crates which was counting wrong and only removing package == <N> and not every package bigger than <N> (#122)
+Fix --remove-if.. --remove-dir=x which was treated like just --remove-dir, skipped validating the remove-if date and removed everything (#127)
+Show time in seconds needed to gc each repo for --gc
+Build remove_dir_all with parallelism support if rayon is used as dep (#131)
 
+MSRV: bump from 1.57 to 1.62
+
+Deps:
+	Update git2 0.14 -> 0.16
+	Update cargo_metadata 0.15.0 ->0.15.2
+	Update chrono 0.4.19 -> 0.4.23
+	Update flate2 1.0.22 -> 1.0.25
+	Update home 0.5.3 -> 0.5.4
+	Update rayon 1.5.0 -> 1.6.1
+	Update regex 1.4.2 -> 1.7.1
+	Update unicode-normalizsation 0.1.19 -> 0.1.22
+	Update walkdir 2.3.1 -> 2.3.2
+	Update path-slash 0.2.0 -> 0.2.1
+	Update pretty_assertions 1.0.0 -> 1.3.0
+	Update tempfile 3.1.0 -> 3.4.0
+	Update humansize 1.1.0 -> 2.1.0
+	Update remove_dir_all 0.7.0 -> 0.8.1 (RUSTSEC-2023-0018)
+```
+
+
+## Version 0.8.3 (f26f8b8)
+```
+MSRV: bump from 1.56 to 1.57
+
+Fix panic when "cargo cache toolchain" runs on a system that does not have rust installed via rustup
+but instead via system distributor for example.
+Instead of crashing, display a nice info message: "Could not find any toolchains installed via rustup!" (#121)
+```
+
+## Version 0.8.2 (b7bf4f4)
+```
+Fix build with nightly rustc 1.60.0-nightly (734368a20 2022-02-07)
+unreachable!("{}") is no longer accepted: https://github.com/rust-lang/rust/issues/92137
+
+Build: add "vendored-libgit" feature that enables libgit2 vendoring (statically link libgit2 into cargo-cache instead of linking agaist the system libgit2)
+The feature is on by default but it can be skipped (using --no-default-features) by distributors who would like cargo-cache to link against system libgit2
+```
+
+## Version 0.8.1 (1fcffbb)
+```
+Fix: 'verify' incorrectly determines paths as missing due to different unicode representations. (#113 / #114)
+
+New deps:
+	unicode-normalization 0.1.19
+```
+
+## Version 0.8.0 (e36f9df)
+```
+Add new subcommand "verify"
+cargo cache verify  tries to check corrupted (modified) crate sources
+The command looks into the .crate archive and compares the contained files with the extracted sources.
+If we find files that are not the same size in both places, the source is considered corrupted.
+cargo cache verify --clean-corrupted will automatically remove the corrupted sources. (supports --dry-run as well)
+
+Upgrade from clap 2.33.3 to 3.0.0
+If you notice any change in behaviour that is not listed here, please let me know!
+
+Cli: removed "cargo cache query -h" for --human-readable because it was ambiguous with -h of --help.
+
+Cli: fix bugs where I was implementing a subcommand cargo-cache foo but then actually checking for it as an argument cargo ceche --foo
+or vice versa.
+Found during migration to clap v3
+
+New deps:
+	flate2 1.0.22
+	tar 0.4.38
 ```
 
 ## Version 0.7.0 (ab0166b)
@@ -246,8 +316,8 @@ Total:                               4.06 GB
   Registry:                        163.43 MB
     Registry index:                156.47 MB
     5 crate archives:                6.96 MB
-  Registry: dl.cloudsmith.io         4.18 KB
-    Registry index:                  3.21 KB
+  Registry: dl.cloudsmith.io         4.18 kB
+    Registry index:                  3.21 kB
     1 crate archives:                 971  B
   Registry: github.com               1.40 GB
     Registry index:                 94.28 MB

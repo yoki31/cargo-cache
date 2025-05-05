@@ -7,6 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
@@ -15,7 +16,7 @@ use crate::cache::*;
 use crate::tables::format_table;
 use crate::top_items::common::*;
 
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, DECIMAL};
 use rayon::prelude::*;
 
 #[derive(Debug)]
@@ -27,14 +28,14 @@ struct BinInfo {
 impl BinInfo {
     fn new(path: &Path) -> Self {
         let name = path.file_name().unwrap().to_str().unwrap().to_string();
-        let size = fs::metadata(&path)
+        let size = fs::metadata(path)
             .unwrap_or_else(|_| panic!("Failed to get metadata of file '{}'", &path.display()))
             .len();
         Self { name, size }
     }
 
     fn size_string(&self) -> String {
-        self.size.file_size(file_size_opts::DECIMAL).unwrap()
+        self.size.format_size(DECIMAL)
     }
 }
 
@@ -77,14 +78,13 @@ pub(crate) fn binary_stats(path: &Path, limit: u32, bin_cache: &mut bin::BinaryC
         return output;
     }
 
-    output.push_str(&format!(
-        "\nSummary of: {} ({} total)\n",
+    writeln!(
+        output,
+        "\nSummary of: {} ({} total)",
         path.display(),
-        bin_cache
-            .total_size()
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap()
-    ));
+        bin_cache.total_size().format_size(DECIMAL)
+    )
+    .unwrap();
 
     let collections_vec = bininfo_list_from_path(bin_cache); // this is already sorted
 
@@ -179,9 +179,9 @@ mod bininfo_struct {
         v.sort_by_key(|b| b.size);
         let mut order_string = String::new();
         for bi in v {
-            order_string.push_str(&format!("{:?}", bi));
+            write!(order_string, "{bi:?}").unwrap();
         }
-        println!("{}", order_string);
+        println!("{order_string}");
         let mut wanted = String::new();
         for i in &[
             r#"BinInfo { name: "b", size: 3 }"#,
@@ -213,9 +213,9 @@ mod bininfo_struct {
         v.par_sort_by_key(|b| b.size);
         let mut order_string = String::new();
         for bi in v {
-            order_string.push_str(&format!("{:?}", bi));
+            write!(order_string, "{bi:?}").unwrap();
         }
-        println!("{}", order_string);
+        println!("{order_string}");
         let mut wanted = String::new();
         for i in &[
             r#"BinInfo { name: "a", size: 5 }"#,

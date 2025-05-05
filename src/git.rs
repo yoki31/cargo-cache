@@ -11,13 +11,16 @@ use std::fs;
 use std::io::{stdout, Write};
 use std::path::Path;
 use std::process::Command;
+use std::time::SystemTime;
 
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, DECIMAL};
 
 use crate::library::Error;
 use crate::library::*;
 
 fn gc_repo(path: &Path, dry_run: bool) -> Result<(u64, u64), Error> {
+    let start_time = SystemTime::now();
+
     // get name of the repo (last item of path)
     let repo_name = match path.iter().last() {
         Some(name) => name.to_str().unwrap().to_string(),
@@ -33,8 +36,8 @@ fn gc_repo(path: &Path, dry_run: bool) -> Result<(u64, u64), Error> {
 
     // get size before
     let repo_size_before = cumulative_dir_size(path).dir_size;
-    let sb_human_readable = repo_size_before.file_size(file_size_opts::DECIMAL).unwrap();
-    print!("{} => ", sb_human_readable);
+    let sb_human_readable = repo_size_before.format_size(DECIMAL);
+    print!("{sb_human_readable} => ");
 
     // we need to flush stdout manually for incremental print();
     // ignore errors
@@ -42,11 +45,11 @@ fn gc_repo(path: &Path, dry_run: bool) -> Result<(u64, u64), Error> {
 
     if dry_run {
         // don't do anything on dry run
-        println!("{} (+0)", sb_human_readable);
+        println!("{sb_human_readable} (+0)");
         Ok((0, 0))
     } else {
         // validate that the directory is a git repo
-        let repo = match git2::Repository::open(&path) {
+        let repo = match git2::Repository::open(path) {
             Ok(repo) => repo,
             Err(_e) => return Err(Error::GitRepoNotOpened(path.into())),
         };
@@ -104,8 +107,11 @@ fn gc_repo(path: &Path, dry_run: bool) -> Result<(u64, u64), Error> {
         }
 
         let repo_size_after = cumulative_dir_size(path).dir_size;
+
+        let seconds_spent_compressing = start_time.elapsed().unwrap().as_secs();
+
         println!(
-            "{}",
+            "{}, {seconds_spent_compressing}s",
             size_diff_format(repo_size_before, repo_size_after, false)
         );
 
@@ -132,7 +138,7 @@ pub(crate) fn git_gc_everything(
         let mut size_sum_before: u64 = 0;
         let mut size_sum_after: u64 = 0;
 
-        let mut git_repos: Vec<_> = fs::read_dir(&path)
+        let mut git_repos: Vec<_> = fs::read_dir(path)
             .unwrap()
             .map(|x| x.unwrap().path())
             .collect();
@@ -149,7 +155,7 @@ pub(crate) fn git_gc_everything(
                     Error::GitGCFailed(_, _)
                     | Error::GitRepoDirNotFound(_)
                     | Error::GitRepoNotOpened(_) => {
-                        eprintln!("{}", error);
+                        eprintln!("{error}");
                         continue;
                     }
 
@@ -189,9 +195,7 @@ pub(crate) fn git_gc_everything(
 
     println!(
         "\nCompressed {} to {}",
-        total_size_before
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap(),
+        total_size_before.format_size(DECIMAL),
         size_diff_format(total_size_before, total_size_after, false)
     );
     Ok(())
@@ -212,7 +216,7 @@ fn fsck_repo(path: &Path) -> Result<(), Error> {
         return Err(Error::GitRepoDirNotFound(path.into()));
     }
 
-    let repo = match git2::Repository::open(&path) {
+    let repo = match git2::Repository::open(path) {
         Ok(repo) => repo,
         Err(_e) => return Err(Error::GitRepoNotOpened(path.into())),
     };
@@ -248,7 +252,7 @@ pub(crate) fn git_fsck_everything(
             return;
         }
 
-        let mut git_repos: Vec<_> = fs::read_dir(&path)
+        let mut git_repos: Vec<_> = fs::read_dir(path)
             .unwrap()
             .map(|x| x.unwrap().path())
             .collect();
@@ -264,7 +268,7 @@ pub(crate) fn git_fsck_everything(
                     Error::GitFsckFailed(_, _)
                     | Error::GitRepoDirNotFound(_)
                     | Error::GitRepoNotOpened(_) => {
-                        eprintln!("{}", error);
+                        eprintln!("{error}");
                         continue;
                     }
 
@@ -308,11 +312,7 @@ mod gittest {
             .arg("gitrepo_gc")
             .current_dir("target")
             .output();
-        assert!(
-            git_init.is_ok(),
-            "git_init did not succeed: '{:?}'",
-            git_init
-        );
+        assert!(git_init.is_ok(), "git_init did not succeed: '{git_init:?}'");
         // create a file and add some text
         let mut file = File::create("target/gitrepo_gc/testfile.txt").unwrap();
         file.write_all(b"Hello hello hello this is a test \n hello \n hello")
@@ -322,7 +322,7 @@ mod gittest {
             .arg("testfile.txt")
             .current_dir("target/gitrepo_gc/")
             .output();
-        assert!(git_add.is_ok(), "git add did not succeed: '{:?}'", git_add);
+        assert!(git_add.is_ok(), "git add did not succeed: '{git_add:?}'");
         let git_commit = Command::new("git")
             .arg("commit")
             .arg("-m")
@@ -331,8 +331,7 @@ mod gittest {
             .output();
         assert!(
             git_commit.is_ok(),
-            "git commit did not succeed: '{:?}'",
-            git_commit
+            "git commit did not succeed: '{git_commit:?}'"
         );
         // create another commit
         let mut file2 = File::create("target/gitrepo_gc/testfile.txt").unwrap();
@@ -348,7 +347,7 @@ mod gittest {
             .arg("testfile.txt")
             .current_dir("target/gitrepo_gc/")
             .output();
-        assert!(git_add2.is_ok(), "git add did not succeed: '{:?}'", git_add);
+        assert!(git_add2.is_ok(), "git add did not succeed: '{git_add:?}'");
         let git_commit2 = Command::new("git")
             .arg("commit")
             .arg("-m")
@@ -357,8 +356,7 @@ mod gittest {
             .output();
         assert!(
             git_commit2.is_ok(),
-            "git commit did not succeed: '{:?}'",
-            git_commit2
+            "git commit did not succeed: '{git_commit2:?}'"
         );
 
         let (dryrun_before, dryrun_after) = match gc_repo(
@@ -381,9 +379,7 @@ mod gittest {
         };
         assert!(
             !before > after,
-            "git gc is funky: before: {}  after: {}",
-            before,
-            after
+            "git gc is funky: before: {before}  after: {after}"
         );
     }
 
@@ -395,11 +391,7 @@ mod gittest {
             .arg("gitrepo_fsck")
             .current_dir("target")
             .output();
-        assert!(
-            git_init.is_ok(),
-            "git_init did not succeed: '{:?}'",
-            git_init
-        );
+        assert!(git_init.is_ok(), "git_init did not succeed: '{git_init:?}'");
         // create a file and add some text
         let mut file = File::create("target/gitrepo_fsck/testfile.txt").unwrap();
         file.write_all(b"Hello hello hello this is a test \n hello \n hello")
@@ -409,7 +401,7 @@ mod gittest {
             .arg("testfile.txt")
             .current_dir("target/gitrepo_fsck/")
             .output();
-        assert!(git_add.is_ok(), "git add did not succeed: '{:?}'", git_add);
+        assert!(git_add.is_ok(), "git add did not succeed: '{git_add:?}'");
         let git_commit = Command::new("git")
             .arg("commit")
             .arg("-m")
@@ -418,8 +410,7 @@ mod gittest {
             .output();
         assert!(
             git_commit.is_ok(),
-            "git commit did not succeed: '{:?}'",
-            git_commit
+            "git commit did not succeed: '{git_commit:?}'"
         );
         // create another commit
         let mut file2 = File::create("target/gitrepo_fsck/testfile.txt").unwrap();
@@ -435,11 +426,7 @@ mod gittest {
             .arg("testfile.txt")
             .current_dir("target/gitrepo_fsck/")
             .output();
-        assert!(
-            git_add2.is_ok(),
-            "git add did not succeed: '{:?}'",
-            git_add2
-        );
+        assert!(git_add2.is_ok(), "git add did not succeed: '{git_add2:?}'");
         let git_commit2 = Command::new("git")
             .arg("commit")
             .arg("-m")
@@ -448,11 +435,10 @@ mod gittest {
             .output();
         assert!(
             git_commit2.is_ok(),
-            "git commit did not succeed: '{:?}'",
-            git_commit2
+            "git commit did not succeed: '{git_commit2:?}'"
         );
 
         let res = fsck_repo(&PathBuf::from("target/gitrepo_fsck/"));
-        assert!(res.is_ok(), "Failed to fsck git repo: {:?}", res);
+        assert!(res.is_ok(), "Failed to fsck git repo: {res:?}");
     }
 }

@@ -7,15 +7,16 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::cache::*;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::cache::caches::Cache;
+use crate::cache::*;
 use crate::tables::format_table;
 use crate::top_items::common::{dir_exists, FileDesc, Pair};
 
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, DECIMAL};
 use rayon::prelude::*;
 use walkdir::WalkDir;
 
@@ -83,7 +84,7 @@ impl ChkInfo {
         let name: String;
         let size: u64;
         if path.exists() {
-            size = fs::metadata(&path)
+            size = fs::metadata(path)
                 .unwrap_or_else(|_| panic!("Failed to get metadata of file '{}'", &path.display()))
                 .len();
             let mut p = path.to_path_buf();
@@ -227,13 +228,8 @@ fn chkout_list_to_string(limit: u32, mut collections_vec: Vec<ChkInfo>) -> Strin
 
     for chkout in collections_vec.into_iter().take(limit as usize) {
         #[allow(clippy::integer_division)]
-        let average_size = (chkout.total_size / u64::from(chkout.counter))
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap();
-        let total_size = chkout
-            .total_size
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap();
+        let average_size = (chkout.total_size / u64::from(chkout.counter)).format_size(DECIMAL);
+        let total_size = chkout.total_size.format_size(DECIMAL);
 
         table_matrix.push(vec![
             chkout.name,
@@ -258,14 +254,13 @@ pub(crate) fn git_checkouts_stats(
         return output;
     }
 
-    output.push_str(&format!(
-        "\nSummary of: {} ({} total)\n",
+    writeln!(
+        output,
+        "\nSummary of: {} ({} total)",
         path.display(),
-        checkouts_cache
-            .total_size()
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap()
-    ));
+        checkouts_cache.total_size().format_size(DECIMAL)
+    )
+    .unwrap();
 
     let collections_vec = file_desc_from_path(checkouts_cache);
     let summary: Vec<ChkInfo> = stats_from_file_desc_list(collections_vec);

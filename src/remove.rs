@@ -14,7 +14,7 @@ use crate::cache::caches::{Cache, RegistrySuperCache};
 use crate::cache::*;
 use crate::library::*;
 
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, DECIMAL};
 
 /// dry run message setting
 pub(crate) enum DryRunMessage<'a> {
@@ -73,15 +73,15 @@ pub(crate) fn rm_old_crates(
     // src can be completely removed since we can always rebuilt it from cache (by extracting packages)
     let mut removed_size = 0;
     // walk registry repos
-    for repo in fs::read_dir(&registry_src_path).unwrap() {
-        let mut crate_list = fs::read_dir(&repo.unwrap().path())
+    for repo in fs::read_dir(registry_src_path).unwrap() {
+        let mut crate_list = fs::read_dir(repo.unwrap().path())
             .unwrap()
             .map(|cratepath| cratepath.unwrap().path())
             .collect::<Vec<PathBuf>>();
         crate_list.sort();
         crate_list.reverse();
 
-        let mut versions_of_this_package = 0;
+        let mut versions_of_this_package = 1;
         let mut last_pkgname = String::new();
 
         // iterate over all crates and extract name and version
@@ -113,10 +113,10 @@ pub(crate) fn rm_old_crates(
                 continue;
             }
             // println!("pkgname: {:?}, pkgver: {:?}", pkgname, pkgver);
-
+            // same package again
             if last_pkgname == pkgname {
                 versions_of_this_package += 1;
-                if versions_of_this_package == amount_to_keep {
+                if versions_of_this_package > amount_to_keep {
                     // we have seen this package too many times, queue for deletion
                     removed_size += fs::metadata(pkgpath)
                         .unwrap_or_else(|_| {
@@ -141,14 +141,14 @@ pub(crate) fn rm_old_crates(
                 }
             } else {
                 // last_pkgname != pkgname, we got to a new package, reset counter
-                versions_of_this_package = 0;
+                versions_of_this_package = 1;
                 last_pkgname = pkgname;
             } // if last_pkgname == pkgname
         } // for pkgpath in &crate_list
     }
     println!(
         "Removed {} of compressed crate sources.",
-        removed_size.file_size(file_size_opts::DECIMAL).unwrap()
+        removed_size.format_size(DECIMAL)
     );
     Ok(())
 }
@@ -243,7 +243,7 @@ pub(crate) fn remove_dir_via_cmdline(
     if dry_run {
         println!(
             "dry-run: would remove in total: {}",
-            size_removed.file_size(file_size_opts::DECIMAL).unwrap()
+            size_removed.format_size(DECIMAL)
         );
     }
 
@@ -288,14 +288,14 @@ pub(crate) fn remove_file(
     if dry_run {
         match dry_run_msg {
             DryRunMessage::Custom(msg) => {
-                println!("{}", msg);
+                println!("{msg}");
             }
             DryRunMessage::Default => {
                 #[allow(clippy::single_match_else)]
                 match total_size_from_cache {
                     Some(size) => {
                         // print the size that is saved from the cache before removing
-                        let size_hr = size.file_size(file_size_opts::DECIMAL).unwrap();
+                        let size_hr = size.format_size(DECIMAL);
                         println!("dry-run: would remove: '{}' ({})", path.display(), size_hr);
                     }
                     None => {
@@ -310,22 +310,22 @@ pub(crate) fn remove_file(
         // no dry run
         // print deletion message if we have one
         if let Some(msg) = deletion_msg {
-            println!("{}", msg);
+            println!("{msg}");
         }
 
-        if path.is_file() && fs::remove_file(&path).is_err() {
+        if path.is_file() && fs::remove_file(path).is_err() {
             eprintln!("Warning: failed to remove file \"{}\".", path.display());
         } else {
             *size_changed = true;
         }
 
         if path.is_dir() {
-            if let Err(error) = remove_dir_all::remove_dir_all(&path) {
+            if let Err(error) = remove_dir_all::remove_dir_all(path) {
                 eprintln!(
                     "Warning: failed to recursively remove directory \"{}\".",
                     path.display()
                 );
-                eprintln!("error: {:?}", error);
+                eprintln!("error: {error:?}");
             } else {
                 *size_changed = true;
             }

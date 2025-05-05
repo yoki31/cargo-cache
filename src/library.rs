@@ -9,6 +9,7 @@
 
 /// This file provides core logic of the crate
 use std::fmt;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -16,7 +17,7 @@ use crate::cache::caches::{Cache, RegistrySuperCache};
 use crate::cache::*;
 use crate::dirsizes::DirSizes;
 
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, FormatSizeI, DECIMAL};
 use rayon::iter::*;
 use walkdir::WalkDir;
 
@@ -33,7 +34,7 @@ impl<T, E: std::fmt::Display> ErrorHandling<T, E> for CargoCacheResult<T, E> {
         match self {
             Ok(t) => t,
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 std::process::exit(1);
             }
         }
@@ -46,7 +47,7 @@ impl<T, E: std::fmt::Display> ErrorHandling<T, E> for CargoCacheResult<T, E> {
                 std::process::exit(0);
             }
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 std::process::exit(1);
             }
         }
@@ -188,7 +189,7 @@ impl fmt::Display for Error {
             Self::GitNotInstalled => write!(f, "Could not find 'git' binary. Is 'git' installed?",),
 
             Self::MalformedPackageName(pkgname) => {
-                write!(f, "Error:  \"{}\" is not a valid package name", pkgname)
+                write!(f, "Error:  \"{pkgname}\" is not a valid package name")
             }
 
             Self::GetCargoHomeFailed => write!(f, "Failed to get CARGO_HOME!"),
@@ -201,23 +202,21 @@ impl fmt::Display for Error {
 
             Self::InvalidDeletableDirs(dirs) => write!(
                 f,
-                "\"{}\" are not valid removable directories! Chose one or several from {}",
-                dirs, valid_deletable_dirs
+                "\"{dirs}\" are not valid removable directories! Chose one or several from {valid_deletable_dirs}"
             ),
 
             Self::RemoveDirNoArg => write!(
                 f,
-                "No argument passed to \"--remove-dir\"! Chose one or several from {}",
-                valid_deletable_dirs
+                "No argument passed to \"--remove-dir\"! Chose one or several from {valid_deletable_dirs}"
             ),
             Self::NoCWD => write!(f, "Failed to find current working directory!",),
             Self::NoCargoManifest(dir) => write!(
                 f,
-                "Failed to Cargo.toml manifest in {} or downwards.",
+                "Failed to find Cargo.toml manifest in {} or downwards.",
                 dir.display()
             ),
             Self::QueryRegexFailedParsing(regex) => {
-                write!(f, "Failed to parse regular expression \"{}\"", regex)
+                write!(f, "Failed to parse regular expression \"{regex}\"")
             }
             Self::GitGCFile(path) => write!(
                 f,
@@ -231,7 +230,10 @@ impl fmt::Display for Error {
                 path.display()
             ),
             Self::DateParseFailure(date, error) => {
-                write!(f, "ERROR failed to parse {} as date {}", date, error)
+                write!(
+                    f,
+                    "ERROR failed to parse '{date}' as date {error}, expected YYYY.MM.DD or HH:MM:SS "
+                )
             }
             Self::UnparsableManifest(path, error) => write!(
                 f,
@@ -247,9 +249,8 @@ impl fmt::Display for Error {
             Self::NoRustupHome => write!(f, "Failed to determine rustup home directory"),
             Self::TrimLimitUnitParseFailure(limit) => write!(
                 f,
-                "Failed to parse limit: \"{}\". \
-                Should be of the form 123X where X is one of B,K,M,G or T.",
-                limit
+                "Failed to parse limit: \"{limit}\". \
+                Should be of the form 123X where X is one of B,K,M,G or T."
             ),
         }
     }
@@ -465,7 +466,7 @@ pub(crate) fn size_of_path(path: &Path) -> u64 {
     if path.is_dir() {
         cumulative_dir_size(path).dir_size
     } else {
-        fs::metadata(&path)
+        fs::metadata(path)
             .unwrap_or_else(|_| panic!("Failed to get metadata of file '{}'", &path.display()))
             .len()
     }
@@ -510,7 +511,7 @@ pub(crate) fn cumulative_dir_size(dir: &Path) -> DirInfo {
             .into_iter()
             .count()
     } else {
-        fs::read_dir(&dir).unwrap().count()
+        fs::read_dir(dir).unwrap().count()
     } as u64;
 
     DirInfo {
@@ -524,56 +525,61 @@ pub(crate) fn get_info(c: &CargoCachePaths, s: &DirSizes<'_>) -> String {
     let mut strn = String::with_capacity(1500);
 
     if let Ok(cache_path) = std::env::var("CARGO_HOME") {
-        strn.push_str(&format!(
-            "${{CARGO_HOME}} env var set to '{}', using that!\n",
-            cache_path
-        ));
+        writeln!(
+            strn,
+            "${{CARGO_HOME}} env var set to '{cache_path}', using that!"
+        )
+        .unwrap();
     } else {
-        strn.push_str(&format!(
-            "Default cache dir found: '{}', using that!\n",
+        writeln!(
+            strn,
+            "Default cache dir found: '{}', using that!",
             c.cargo_home.display()
-        ));
+        )
+        .unwrap();
     };
 
     strn.push('\n');
 
-    strn.push_str(&format!(
-        "Total cache size: {}\n\n",
-        s.total_size().file_size(file_size_opts::DECIMAL).unwrap()
-    ));
+    writeln!(
+        strn,
+        "Total cache size: {}\n",
+        s.total_size().format_size(DECIMAL)
+    )
+    .unwrap();
 
     strn.push_str(&c.bin_dir.display().to_string());
     strn.push('\n');
-    strn.push_str(&format!(
-        "\t{} binaries installed in binary directory, total size: {}\n",
+    writeln!(
+        strn,
+        "\t{} binaries installed in binary directory, total size: {}",
         s.numb_bins(),
-        s.total_bin_size()
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap()
-    ));
+        s.total_bin_size().format_size(DECIMAL)
+    )
+    .unwrap();
     strn.push_str("\tThese are the binaries installed via 'cargo install'.\n");
     strn.push_str("\tUse 'cargo uninstall' to remove binaries if needed.\n");
     strn.push('\n');
 
     strn.push_str(&c.registry.display().to_string());
     strn.push('\n');
-    strn.push_str(&format!(
-        "\tRegistry root dir, size: {}\n",
-        s.total_reg_size()
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap()
-    ));
+    writeln!(
+        strn,
+        "\tRegistry root dir, size: {}",
+        s.total_reg_size().format_size(DECIMAL)
+    )
+    .unwrap();
     strn.push_str("\tCrate registries are stored here.\n");
     strn.push('\n');
 
     strn.push_str(&c.registry_index.display().to_string());
     strn.push('\n');
-    strn.push_str(&format!(
-        "\tRegistry index, size: {}\n",
-        s.total_reg_index_size()
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap()
-    ));
+    writeln!(
+        strn,
+        "\tRegistry index, size: {}",
+        s.total_reg_index_size().format_size(DECIMAL)
+    )
+    .unwrap();
     strn.push_str("\tA git repo holding information on what crates are available.\n");
     strn.push_str("\tWill be recloned as needed.\n");
 
@@ -582,12 +588,12 @@ pub(crate) fn get_info(c: &CargoCachePaths, s: &DirSizes<'_>) -> String {
     // source archives are extracted here, will be reextracted from the downloaded source if removed
     strn.push_str(&c.registry_pkg_cache.display().to_string());
     strn.push('\n');
-    strn.push_str(&format!(
-        "\tCrate source package archive, size: {}\n",
-        s.total_reg_cache_size()
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap()
-    ));
+    writeln!(
+        strn,
+        "\tCrate source package archive, size: {}",
+        s.total_reg_cache_size().format_size(DECIMAL)
+    )
+    .unwrap();
 
     strn.push_str("\tCrates source packages of the registries are downloaded into this folder.\n");
     strn.push_str("\tThey will be redownloaded as needed.\n");
@@ -596,36 +602,36 @@ pub(crate) fn get_info(c: &CargoCachePaths, s: &DirSizes<'_>) -> String {
     strn.push_str(&c.registry_sources.display().to_string());
     strn.push('\n');
 
-    strn.push_str(&format!(
-        "\tCrate sources, size: {}\n",
-        s.total_reg_src_size()
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap()
-    ));
+    writeln!(
+        strn,
+        "\tCrate sources, size: {}",
+        s.total_reg_src_size().format_size(DECIMAL)
+    )
+    .unwrap();
     strn.push_str("\tSource archives are extracted into this dir.\n");
     strn.push_str("\tThey will be reextracted from the package archive as needed.\n");
     strn.push('\n');
 
     strn.push_str(&c.git_repos_bare.display().to_string());
     strn.push('\n');
-    strn.push_str(&format!(
-        "\tGit database, size: {}\n",
-        s.total_git_repos_bare_size()
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap()
-    ));
+    writeln!(
+        strn,
+        "\tGit database, size: {}",
+        s.total_git_repos_bare_size().format_size(DECIMAL)
+    )
+    .unwrap();
     strn.push_str("\tBare repos of git dependencies are stored here.\n");
     strn.push_str("\tRemoved git repositories will be recloned as needed.\n");
     strn.push('\n');
 
     strn.push_str(&c.git_checkouts.display().to_string());
     strn.push('\n');
-    strn.push_str(&format!(
-        "\tGit repo checkouts, size: {}\n",
-        s.total_git_chk_size()
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap()
-    ));
+    writeln!(
+        strn,
+        "\tGit repo checkouts, size: {}",
+        s.total_git_chk_size().format_size(DECIMAL)
+    )
+    .unwrap();
     strn.push_str("\tSpecific commits of the bare repos will be checked out into here.\n");
     strn.push_str("\tGit checkouts will be rechecked-out from repo database as needed.");
     //println!("{}", strn.len());
@@ -642,13 +648,10 @@ pub(crate) fn size_diff_format(
     #[allow(clippy::cast_possible_wrap)]
     let size_diff: i64 = size_after as i64 - size_before as i64;
     let sign = if size_diff > 0 { "+" } else { "" };
-    let size_after_human_readable = size_after.file_size(file_size_opts::DECIMAL).unwrap();
-    let humansize_opts = file_size_opts::FileSizeOpts {
-        allow_negative: true,
-        ..file_size_opts::DECIMAL
-    };
-    let size_diff_human_readable = size_diff.file_size(humansize_opts).unwrap();
-    let size_before_human_readabel = size_before.file_size(file_size_opts::DECIMAL).unwrap();
+    let size_after_human_readable = size_after.format_size(DECIMAL);
+
+    let size_diff_human_readable = size_diff.format_size_i(DECIMAL);
+    let size_before_human_readabel = size_before.format_size(DECIMAL);
     // calculate change in percentage
     // when printing, we are going to cut off everything but a few decimal places anyway, so
     // precision is not much of an issue.
@@ -661,27 +664,16 @@ pub(crate) fn size_diff_format(
 
     if size_before == size_after {
         if display_size_before {
-            format!(
-                "{} => {}",
-                size_before_human_readabel, size_after_human_readable
-            )
+            format!("{size_before_human_readabel} => {size_after_human_readable}")
         } else {
             size_after_human_readable
         }
     } else if display_size_before {
         format!(
-            "{} => {} ({}{}, {}%)",
-            size_before_human_readabel,
-            size_after_human_readable,
-            sign,
-            size_diff_human_readable,
-            percentage
+            "{size_before_human_readabel} => {size_after_human_readable} ({sign}{size_diff_human_readable}, {percentage}%)"
         )
     } else {
-        format!(
-            "{} ({}{}, {}%)",
-            size_after_human_readable, sign, size_diff_human_readable, percentage
-        )
+        format!("{size_after_human_readable} ({sign}{size_diff_human_readable}, {percentage}%)")
     }
 }
 
@@ -717,9 +709,7 @@ pub(crate) fn print_size_changed_summary(
     )
     .total_size();
 
-    let size_old_human_readable = previous_total_size
-        .file_size(file_size_opts::DECIMAL)
-        .unwrap();
+    let size_old_human_readable = previous_total_size.format_size(DECIMAL);
     println!(
         "\nSize changed from {} to {}",
         size_old_human_readable,
@@ -783,7 +773,7 @@ mod libtests {
     fn test_CargoCachePaths_gen() {
         // set cargo cache root dir to /tmp
         let dir_paths = CargoCachePaths::new(env::temp_dir());
-        assert!(dir_paths.is_ok(), "dir paths: {:?}", dir_paths);
+        assert!(dir_paths.is_ok(), "dir paths: {dir_paths:?}");
     }
 
     #[allow(non_snake_case)]
@@ -896,8 +886,7 @@ mod libtests {
             })
             .unwrap()
             .is_match(cargo_home2),
-            "cargo home: \"{:?}\"",
-            cargo_home
+            "cargo home: \"{cargo_home:?}\""
         );
 
         let bins = iter.next().unwrap();
@@ -965,7 +954,7 @@ mod libtests {
 
         // should be empty now
         let last = iter.next();
-        assert!(!last.is_some(), "found another directory?!: '{:?}'", last);
+        assert!(last.is_none(), "found another directory?!: '{last:?}'");
     }
 }
 

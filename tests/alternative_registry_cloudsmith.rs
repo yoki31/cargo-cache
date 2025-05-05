@@ -23,6 +23,20 @@ use regex::Regex;
 fn alternative_registry_works() {
     // make sure alternative registries work
 
+    let cargo_v = Command::new("cargo").arg("--version").output().unwrap();
+    let version_output = String::from_utf8_lossy(&cargo_v.stdout).to_string();
+
+    //https://github.com/rust-lang/cargo/pull/10553
+    let disallowed_versions = ["1.57", "1.60", "1.61", "1.62", "1.68", "1.69"];
+    if disallowed_versions
+        .iter()
+        .any(|version| version_output.contains(version))
+    {
+        return;
+    }
+
+    // ^  new sparse index moved from github to index.crates.io
+
     // first create a $CARGO_HOME with a config file
     let cargo_home_path = {
         let mut path = PathBuf::from("target");
@@ -40,10 +54,7 @@ fn alternative_registry_works() {
         path
     };
 
-    println!(
-        "DEBUG: cargo config file path: '{:?}'",
-        cargo_config_file_path
-    );
+    println!("DEBUG: cargo config file path: '{cargo_config_file_path:?}'");
 
     // next we need to set up the alternative registry inside the ${CARGO_HOME}/config
 
@@ -57,7 +68,7 @@ cloudsmith = { index = "https://dl.cloudsmith.io/public/matthias-kruger/ccart/ca
 "#,
     );
 
-    println!("DEBUG: config text:\n{}\n", config_text);
+    println!("DEBUG: config text:\n{config_text}\n");
     // write the content into the config file
     cfg_file_handle
         .write_all(config_text.as_bytes())
@@ -85,7 +96,7 @@ cloudsmith = { index = "https://dl.cloudsmith.io/public/matthias-kruger/ccart/ca
     // and fill the cargo_home with the alternative registry
     let fetch_cmd = Command::new("cargo")
         .arg("fetch")
-        .current_dir(&project_path)
+        .current_dir(project_path)
         .env("CARGO_HOME", cargo_home_path_absolute.display().to_string())
         .output()
         .unwrap();
@@ -97,14 +108,14 @@ cloudsmith = { index = "https://dl.cloudsmith.io/public/matthias-kruger/ccart/ca
     // @TODO handle all  command::new() calls that way!
     if !fetch_cmd.status.success() {
         println!("error while cargo building test crate");
-        println!("stderr:\n{:?}", stderr);
-        println!("stdout:\n{:?}", stdout);
-        println!("status: {:?}", status);
+        println!("stderr:\n{stderr:?}");
+        println!("stdout:\n{stdout:?}");
+        println!("status: {status:?}");
         panic!("error while building test crate");
     }
 
-    println!("ERR {:?}", stderr);
-    println!("OUT {:?}", stdout);
+    println!("ERR {stderr:?}");
+    println!("OUT {stdout:?}");
 
     // run cargo cache on the new cargo_home
     let cargo_cache_cmd = Command::new(bin_path())
@@ -115,40 +126,42 @@ cloudsmith = { index = "https://dl.cloudsmith.io/public/matthias-kruger/ccart/ca
 
     if !cargo_cache_cmd.status.success() {
         println!("error running cargo-cache on alt reg $CARGO_HOME");
-        println!("stderr:\n{:?}", stderr);
-        println!("stdout:\n{:?}", stdout);
-        println!("status: {:?}", status);
+        println!("stderr:\n{stderr:?}");
+        println!("stdout:\n{stdout:?}");
+        println!("status: {status:?}");
         panic!("error while running cargo-home with alt regs");
     }
 
     let stdout = String::from_utf8_lossy(&cargo_cache_cmd.stdout).to_string();
 
-    println!("DEBUG: cargo-cache output:\n\n{}", stdout);
+    println!("DEBUG: cargo-cache output:\n\n{stdout}");
     // check if the output is what we expect
 
     let mut desired_output =
         String::from("Cargo cache .*target.*alt_reg_cloudsmith_CARGO_HOME.*\n\n");
 
     desired_output.push_str(
-        "Total:                        .* MB
-  0 installed binaries:      .* 0  B
-  Registry:                    .* MB
-    2 registry indices:        .* MB
-    2 crate archives:          .* KB
-    2 crate source checkouts:  .* KB
-  Git db:                    .* 0  B
-    0 bare git repos:        .* 0  B
-    0 git repo checkouts:    .* 0  B",
+        "Total:                         .* kB
+  0 installed binaries:       .* 0  B
+  Registry:                     .* kB
+    2 registry indices:         .* kB
+    2 crate archives:           .* kB
+    2 crate source checkouts:   .* kB
+  Git db:                     .* 0  B
+    0 bare git repos:         .* 0  B
+    0 git repo checkouts:     .* 0  B",
     );
 
     let regex = Regex::new(&desired_output).unwrap();
 
     assert!(
         regex.is_match(&stdout),
-        "ERROR: regex did not match!\n\nregex:\n{:?}\n\ncc_output:\n{:?}",
-        regex,
-        stdout
+        "ERROR: regex did not match!\n\nregex:\n{regex:?}\n\ncc_output:\n{stdout}"
     );
+
+    println!("================================");
+    println!("cargo cache registry   test");
+    println!("================================");
 
     // test "cargo cache registry" output
 
@@ -157,14 +170,14 @@ cloudsmith = { index = "https://dl.cloudsmith.io/public/matthias-kruger/ccart/ca
 
     Total:                          80.41 MB
       0 installed binaries:             0  B
-      Registry: dl.cloudsmith.io     5.52 KB
-        Registry index:              3.21 KB
+      Registry: dl.cloudsmith.io     5.52 kB
+        Registry index:              3.21 kB
         1 crate archives:             971  B
-        1 crate source checkouts:    1.34 KB
+        1 crate source checkouts:    1.34 kB
       Registry: github.com          80.40 MB
         Registry index:             80.39 MB
-        1 crate archives:            2.79 KB
-        1 crate source checkouts:    7.76 KB
+        1 crate archives:            2.79 kB
+        1 crate source checkouts:    7.76 kB
       Git db:                           0  B
         0 bare git repos:               0  B
         0 git repo checkouts:           0  B
@@ -179,31 +192,31 @@ cloudsmith = { index = "https://dl.cloudsmith.io/public/matthias-kruger/ccart/ca
 
     if !cargo_cache_registry_cmd.status.success() {
         println!("error running cargo-cache on alt reg $CARGO_HOME");
-        println!("stderr:\n{:?}", stderr);
-        println!("stdout:\n{:?}", stdout);
-        println!("status: {:?}", status);
+        println!("stderr:\n{stderr:?}");
+        println!("stdout:\n{stdout:?}");
+        println!("status: {status:?}");
         panic!("error while running cargo-home with alt regs");
     }
 
     let stdout = String::from_utf8_lossy(&cargo_cache_registry_cmd.stdout).to_string();
 
-    println!("DEBUG: cargo-cache output:\n\n{}", stdout);
+    println!("DEBUG: cargo-cache output:\n\n{stdout}");
     // check if the output is what we expect
 
     let mut desired_output =
         String::from("Cargo cache .*target.*alt_reg_cloudsmith_CARGO_HOME.*\n\n");
 
     desired_output.push_str(
-        "Total:                 .* MB
+        "Total:                 .* kB
   0 installed binaries:      .*  0  B
-  Registry: dl.cloudsmith.io    .* KB
-    Registry index:             .* KB
+  Registry: dl.cloudsmith.io    .* kB
+    Registry index:             .* kB
     1 crate archives:           .*  B
-    1 crate source checkouts:   .* KB
-  Registry: github.com          .* MB
-    Registry index:             .* MB
-    1 crate archives:           .* KB
-    1 crate source checkouts:   .* KB
+    1 crate source checkouts:   .* kB
+  Registry: index.crates.io     .* kB
+    Registry index:             .*  B
+    1 crate archives:           .* kB
+    1 crate source checkouts:   .* kB
   Git db:                    .*  0  B
     0 bare git repos:        .*  0  B
     0 git repo checkouts:    .*  0  B",
@@ -213,8 +226,6 @@ cloudsmith = { index = "https://dl.cloudsmith.io/public/matthias-kruger/ccart/ca
 
     assert!(
         regex.is_match(&stdout),
-        "ERROR: regex did not match!\n\nregex:\n{:?}\n\ncc_output:\n{:?}",
-        regex,
-        stdout
+        "ERROR: regex did not match!\n\nregex:\n{regex:?}\n\ncc_output:\n{stdout}"
     );
 }

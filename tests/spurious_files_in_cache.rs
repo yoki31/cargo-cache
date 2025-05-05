@@ -22,13 +22,25 @@ use walkdir::WalkDir;
 #[test]
 #[cfg_attr(feature = "offline_tests", ignore)]
 fn spurious_files_in_cache_test() {
+    let cargo_v = Command::new("cargo").arg("--version").output().unwrap();
+    let version_output = String::from_utf8_lossy(&cargo_v.stdout).to_string();
+
+    //https://github.com/rust-lang/cargo/pull/10553
+    let disallowed_versions = ["1.57", "1.60", "1.61", "1.62", "1.68", "1.69"];
+    if disallowed_versions
+        .iter()
+        .any(|version| version_output.contains(version))
+    {
+        return;
+    }
+
     // move into the directory of our dummy crate
     // set a fake CARGO_HOME and build the dummy crate there
     let crate_path = PathBuf::from("tests/size_test/");
     let fchp = "target/spurious_files_test"; // fake cargo_home path
     let status = Command::new("cargo")
         .arg("fetch")
-        .current_dir(&crate_path)
+        .current_dir(crate_path)
         .env("CARGO_HOME", "../../target/spurious_files_test")
         .output();
     // make sure the build succeeded
@@ -41,6 +53,13 @@ fn spurious_files_in_cache_test() {
         PathBuf::from(&fchp).is_dir(),
         "fake cargo home was not created!"
     );
+
+    /*
+        let wd = WalkDir::new("target/spurious_files_test/");
+        let files = wd.into_iter().collect::<Vec<_>>();
+         dbg!(files);
+    */
+
     // add some files here and there
     File::create("target/spurious_files_test/file1.txt").unwrap();
     File::create("target/spurious_files_test/file2").unwrap();
@@ -50,14 +69,20 @@ fn spurious_files_in_cache_test() {
     File::create("target/spurious_files_test/registry/index/file5").unwrap();
     File::create("target/spurious_files_test/registry/src/file6").unwrap();
 
-    File::create("target/spurious_files_test/registry/cache/github.com-1ecc6299db9ec823/file7")
+    File::create(
+        "target/spurious_files_test/registry/cache/index.crates.io-6f17d22bba15001f/file7",
+    )
+    .unwrap();
+    File::create(
+        "target/spurious_files_test/registry/index/index.crates.io-6f17d22bba15001f/file8",
+    )
+    .unwrap();
+    File::create("target/spurious_files_test/registry/src/index.crates.io-6f17d22bba15001f/file9")
         .unwrap();
-    File::create("target/spurious_files_test/registry/index/github.com-1ecc6299db9ec823/file8")
-        .unwrap();
-    File::create("target/spurious_files_test/registry/src/github.com-1ecc6299db9ec823/file9")
-        .unwrap();
-    create_dir_all("target/spurious_files_test/registry/cache/github.com-1ecc6299db9ec823/foo_dir")
-        .unwrap();
+    create_dir_all(
+        "target/spurious_files_test/registry/cache/index.crates.io-6f17d22bba15001f/foo_dir",
+    )
+    .unwrap();
 
     // git:
     create_dir_all("target/spurious_files_test/git/checkouts").unwrap();
@@ -99,7 +124,7 @@ fn spurious_files_in_cache_test() {
     );
 
     // run it on the fake cargo cache dir
-    let cargo_cache = Command::new(bin_path()).env("CARGO_HOME", &fchp).output();
+    let cargo_cache = Command::new(bin_path()).env("CARGO_HOME", fchp).output();
     assert!(cargo_cache.is_ok(), "cargo cache failed to run");
     let cmd_out = &cargo_cache.unwrap();
     let cc_output = String::from_utf8_lossy(&cmd_out.stdout).into_owned();
@@ -113,7 +138,7 @@ fn spurious_files_in_cache_test() {
       0 installed binaries:                  0  B
       Registry:                          69.94 MB
         Registry index:                  67.50 MB
-        6 crate archives:               407.74 KB
+        6 crate archives:               407.74 kB
         4 crate source checkouts:         2.04 MB
       Git db:                                0  B
         0 bare git repos:                    0  B
@@ -124,8 +149,8 @@ fn spurious_files_in_cache_test() {
         "Total:                    .* MB
   0 installed binaries:        .*  B
   Registry:                    .* MB
-    Registry index:            .* MB
-   .. crate archives:          .* KB
+    Registry index:            .* kB
+   .. crate archives:          .* kB
    .. crate source checkouts:  .* MB
   Git db:                            0  B
     0 bare git repos:                0  B
@@ -136,8 +161,6 @@ fn spurious_files_in_cache_test() {
 
     assert!(
         regex.unwrap().is_match(&cc_output),
-        "regex: {:?}, cc_output: {}",
-        desired_output,
-        cc_output
+        "regex: {desired_output:?}, cc_output: {cc_output}"
     );
 }

@@ -18,7 +18,7 @@ use crate::cache::*;
 use crate::library::*;
 use crate::remove::*;
 
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, DECIMAL};
 use walkdir::WalkDir;
 
 fn get_last_access_of_item(path: &Path) -> std::time::SystemTime {
@@ -106,8 +106,8 @@ fn parse_size_limit_to_bytes(limit: Option<&str>) -> Result<u64, Error> {
 }
 
 /// trim the cache to a certain limit and invalidate caches
-pub(crate) fn trim_cache<'a>(
-    unparsed_size_limit: Option<&'a str>,
+pub(crate) fn trim_cache(
+    unparsed_size_limit: Option<&str>,
     git_checkouts_cache: &mut git_checkouts::GitCheckoutCache,
     bare_repos_cache: &mut git_bare_repos::GitRepoCache,
     registry_pkg_cache: &mut registry_pkg_cache::RegistryPkgCaches,
@@ -183,7 +183,7 @@ pub(crate) fn trim_cache<'a>(
     println!(
         "Removed {} items totalling {}",
         removed_item_count,
-        removed_size.file_size(file_size_opts::DECIMAL).unwrap()
+        removed_size.format_size(DECIMAL)
     );
     Ok(())
 }

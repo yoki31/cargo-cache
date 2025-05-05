@@ -7,6 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -15,7 +16,7 @@ use crate::cache::registry_pkg_cache;
 use crate::tables::format_table;
 use crate::top_items::common::{dir_exists, FileDesc, Pair};
 
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, DECIMAL};
 use rayon::prelude::*;
 
 #[inline]
@@ -32,7 +33,7 @@ fn name_from_path(path: &Path) -> String {
 impl FileDesc {
     pub(crate) fn new_from_reg_cache(path: &Path) -> Self {
         let name = name_from_path(path);
-        let size = fs::metadata(&path)
+        let size = fs::metadata(path)
             .unwrap_or_else(|_| panic!("Failed to get metadata of file '{}'", &path.display()))
             .len();
 
@@ -58,7 +59,7 @@ impl RgchInfo {
         let name: String;
         let size: u64;
         if path.exists() {
-            size = fs::metadata(&path)
+            size = fs::metadata(path)
                 .unwrap_or_else(|_| panic!("Failed to get metadata of file '{}'", &path.display()))
                 .len();
             let n = path.file_name().unwrap().to_str().unwrap().to_string();
@@ -201,14 +202,9 @@ pub(crate) fn regcache_list_to_string(limit: u32, mut collections_vec: Vec<RgchI
 
     for regcache in collections_vec.into_iter().take(limit as usize) {
         #[allow(clippy::integer_division)]
-        let average_size = (regcache.total_size / u64::from(regcache.counter))
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap();
+        let average_size = (regcache.total_size / u64::from(regcache.counter)).format_size(DECIMAL);
 
-        let total_size = regcache
-            .total_size
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap();
+        let total_size = regcache.total_size.format_size(DECIMAL);
 
         table_matrix.push(vec![
             regcache.name,
@@ -232,14 +228,13 @@ pub(crate) fn registry_pkg_cache_stats(
         return stdout;
     }
 
-    stdout.push_str(&format!(
-        "\nSummary of: {} ({} total)\n",
+    writeln!(
+        stdout,
+        "\nSummary of: {} ({} total)",
         path.display(),
-        registry_pkg_caches
-            .total_size()
-            .file_size(file_size_opts::DECIMAL)
-            .unwrap()
-    ));
+        registry_pkg_caches.total_size().format_size(DECIMAL)
+    )
+    .unwrap();
 
     let file_descs: Vec<FileDesc> = file_desc_list_from_path(registry_pkg_caches);
     let summary: Vec<RgchInfo> = stats_from_file_desc_list(file_descs);

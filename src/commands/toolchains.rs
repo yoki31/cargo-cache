@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 
 use chrono::prelude::*;
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, DECIMAL};
 use walkdir::WalkDir;
 
 use crate::library;
@@ -35,7 +35,11 @@ fn toolchains() -> Result<std::fs::ReadDir, library::Error> {
         p
     };
 
-    Ok(std::fs::read_dir(&toolchain_root).unwrap())
+    match std::fs::read_dir(toolchain_root) {
+        Ok(readdir) => Ok(readdir),
+        // we might be on a system that has rust installed purley via package manager and not via rustup! (#121)
+        _ => Err(library::Error::NoRustupHome),
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -47,7 +51,7 @@ struct Toolchain {
     size: u64,
 }
 
-impl<'a> Toolchain {
+impl Toolchain {
     fn new(path: PathBuf) -> Self {
         let name = path.file_name().unwrap().to_owned().into_string().unwrap();
         let number_files = WalkDir::new(&path).into_iter().count();
@@ -60,7 +64,7 @@ impl<'a> Toolchain {
                 z
             })
             .filter(|f| f.is_file())
-            .map(|f| std::fs::metadata(&f).unwrap().len())
+            .map(|f| std::fs::metadata(f).unwrap().len())
             .sum();
 
         Toolchain {
@@ -75,8 +79,16 @@ impl<'a> Toolchain {
 pub(crate) fn toolchain_stats() {
     // get a list of toolchains, sorted by size
     let toolchains = {
-        let mut tcs = toolchains()
-            .unwrap()
+        let toolchain_readdir = match toolchains() {
+            Ok(readdir) => readdir,
+            Err(library::Error::NoRustupHome) => {
+                eprintln!("Could not find any toolchains installed via rustup!");
+                std::process::exit(0);
+            }
+            Err(e) => unreachable!("encountered unexpected error: '{:?}'", e),
+        };
+
+        let mut tcs = toolchain_readdir
             .map(|dir| dir.unwrap().path())
             .map(Toolchain::new)
             .collect::<Vec<_>>();
@@ -95,7 +107,7 @@ pub(crate) fn toolchain_stats() {
             vec![
                 toolchain.name.clone(),
                 toolchain.number_files.to_string(),
-                toolchain.size.file_size(file_size_opts::DECIMAL).unwrap(),
+                toolchain.size.format_size(DECIMAL),
                 percentage_of_as_string(toolchain.size, total_size),
             ]
         })
@@ -131,12 +143,12 @@ pub(crate) fn toolchain_stats() {
     table_vec.push(vec![
         String::from("Total"),
         number_of_files.to_string(),
-        total_size.file_size(file_size_opts::DECIMAL).unwrap(),
+        total_size.format_size(DECIMAL),
         "100 %".into(),
     ]);
 
     // generate the table and print it
     let table = format_table(&table_vec, 1); // need so strip whitespaces added by the padding
     let table_trimmed = table.trim();
-    println!("{}", table_trimmed);
+    println!("{table_trimmed}");
 }

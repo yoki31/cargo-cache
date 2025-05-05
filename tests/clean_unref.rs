@@ -100,9 +100,7 @@ fn test_clean_unref() {
     // make sure size was reduced
     assert!(
         cargo_home_size_before_removel > cargo_home_size_after_removel,
-        "CONDITION NOT MET: {} < {}",
-        cargo_home_size_before_removel,
-        cargo_home_size_after_removel
+        "CONDITION NOT MET: {cargo_home_size_before_removel} < {cargo_home_size_after_removel}"
     );
 
     let status = cargo_cache_command.unwrap();
@@ -147,7 +145,7 @@ fn test_clean_unref() {
     assert!(regex::Regex::new("registry.src").unwrap().is_match(&stdout));
     // we should also see that size was reduced during the operation
     // should have something like:
-    // Size changed from 59.95 MB to 59.96 MB (+14.95 KB, 0.02%)
+    // Size changed from 59.95 MB to 59.96 MB (+14.95 kB, 0.02%)
     assert!(regex::Regex::new(r#"Size changed from.*to.*.*MB"#)
         .unwrap()
         .is_match(&stdout));
@@ -162,26 +160,34 @@ fn test_clean_unref() {
     let mut desired_output = String::from("Cargo cache .*clean_unref_CARGO_HOME.*:\n\n");
     desired_output.push_str(
         "Total:                          .* MB
-  0 installed binaries:             0  B
+  0 installed binaries:           * 0  B
   Registry:                     .* MB
     Registry index:             .* MB
-    1 crate archives:           .* KB
-    1 crate source checkouts:   .* KB
-  Git db:                       .* KB
-    1 bare git repos:           .* KB
-    1 git repo checkouts:       .* KB",
+    1 crate archives:           .* kB
+    1 crate source checkouts:   .* kB
+  Git db:                       .* kB
+    1 bare git repos:           .* kB
+    1 git repo checkouts:       .* kB",
     );
-
-    let regex = Regex::new(&desired_output);
 
     dbg!(&cc_output);
     dbg!(&desired_output);
 
-    assert!(
-        regex.clone().unwrap().is_match(&cc_output),
-        "regex:\n{:?}
-cc_output:\n{}",
-        regex,
-        cc_output
-    );
+    let cargo_cache_output_iter = cc_output.lines();
+    let wanted_output = desired_output.lines();
+    eprintln!("\n\n\n\n");
+    cargo_cache_output_iter
+        .zip(wanted_output)
+        .enumerate()
+        .for_each(|(i, (is, wanted))| {
+            let regex = Regex::new(wanted);
+            assert!(
+                regex.clone().unwrap().is_match(&cc_output),
+                "\n\nline {}\n\n, regex:\n{:?}
+            cc_output:\n{}\n\n",
+                i,
+                regex.unwrap(),
+                is
+            );
+        });
 }

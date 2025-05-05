@@ -49,6 +49,9 @@
     clippy::unnecessary_wraps,
     clippy::unnested_or_patterns,
 //   clippy::wildcard_enum_match_arm // too many FPS for _ => unreachable!()
+    clippy::index_refutable_slice,
+    clippy::return_self_not_must_use,
+    // clippy::string_slice, // fixme!
 )]
 // suppress these warnings:
 // #![allow(clippy::redundant_pub_crate)] // conflicts with unreachable_pub
@@ -57,6 +60,8 @@
 #![allow(clippy::option_if_let_else)] // too pedantic, not that useful...
 #![allow(clippy::upper_case_acronyms)] // questionable
 #![allow(clippy::needless_for_each)] // I like my iterators :(
+#![allow(clippy::assertions_on_result_states)] // not that useful imo
+#![allow(clippy::let_underscore_untyped)] // warns about let _ =  xy.pop() where we don't care about the value
 
 // for the "ci-autoclean" feature, we don't need all these modules so ignore them
 cfg_if::cfg_if! {
@@ -74,6 +79,7 @@ cfg_if::cfg_if! {
         mod top_items_summary;
         mod date;
         mod clean_unref;
+        mod verify;
 
         // use
         use crate::cache::caches::{Cache, RegistrySuperCache};
@@ -88,10 +94,11 @@ cfg_if::cfg_if! {
         use crate::top_items_summary::*;
         use crate::clean_unref::*;
         use crate::cli::{CargoCacheCommands};
+        //use crate::verify;
     }
 }
 
-#[cfg(all(any(test, feature = "bench", not(feature = "ci-autoclean"))))]
+#[cfg(any(test, feature = "bench", not(feature = "ci-autoclean")))]
 mod test_helpers;
 
 #[cfg(all(test, feature = "bench", not(feature = "ci-autoclean")))]
@@ -110,7 +117,7 @@ fn main() {
     let config_enum = cli::clap_to_enum(config);
 
     // handle hidden "version" subcommand
-    if config.is_present("version") {
+    if config.is_present("version") || matches!(config_enum, CargoCacheCommands::Version) {
         println!("cargo-cache {}", cli::get_version());
         process::exit(0);
     }
@@ -140,7 +147,7 @@ fn main() {
 
     if let CargoCacheCommands::ListDirs = config_enum {
         // only print the directories and exit, don't calculate anything else
-        println!("{}", cargo_cache);
+        println!("{cargo_cache}");
         process::exit(0);
     }
 
@@ -467,6 +474,36 @@ fn main() {
                 eprintln!("Warning: there is nothing to be dry run!");
             }
         }
+        CargoCacheCommands::Verify {
+            clean_corrupted,
+            dry_run,
+        } => {
+            println!("Verifying cache, this may take some time...\n");
+            if let Err(failed_verifications) = verify::verify_crates(&mut registry_sources_caches) {
+                eprintln!("\n");
+                failed_verifications
+                    .iter()
+                    .for_each(|diff| println!("{}", diff.details()));
+                eprintln!(
+                    "\nFound {} possible corrupted sources.",
+                    failed_verifications.len()
+                );
+
+                if clean_corrupted {
+                    verify::clean_corrupted(
+                        &mut registry_sources_caches,
+                        &failed_verifications,
+                        dry_run,
+                    );
+                } else {
+                    println!("Hint: use `cargo cache verify --clean-corrupted` to remove them.");
+                }
+
+                std::process::exit(1)
+            } else {
+                std::process::exit(0);
+            }
+        }
         _ => (),
     }
 
@@ -495,10 +532,10 @@ fn main() {
             &mut registry_sources_caches,
             &mut registry_pkgs_cache,
         );
-        print!("{}", output);
+        print!("{output}");
     } else if matches!(config_enum, CargoCacheCommands::DefaultSummary) {
         // default summary
-        print!("{}", dir_sizes_original);
+        print!("{dir_sizes_original}");
     }
 
     if debug_mode {
@@ -512,11 +549,11 @@ fn main() {
         let file_count = wd.into_iter().count();
         let time_as_milis = time_elasped.as_millis();
         let time_as_nanos = time_elasped.as_nanos();
-        println!("processed {} files in {} ms", file_count, time_as_milis);
+        println!("processed {file_count} files in {time_as_milis} ms");
         let files_per_ms = file_count as u128 / time_as_milis;
         let ns_per_file = time_as_nanos / file_count as u128;
-        println!("{} files per ms", files_per_ms);
-        println!("{} ns per file", ns_per_file);
+        println!("{files_per_ms} files per ms");
+        println!("{ns_per_file} ns per file");
     }
 }
 
@@ -561,11 +598,11 @@ fn main() {
     } // impl CargoCachePaths
 
     pub(crate) fn remove_file(path: &Path) {
-        if path.is_file() && std::fs::remove_file(&path).is_err() {
+        if path.is_file() && std::fs::remove_file(path).is_err() {
             eprintln!("Warning: failed to remove file \"{}\".", path.display());
         }
 
-        if path.is_dir() && remove_dir_all::remove_dir_all(&path).is_err() {
+        if path.is_dir() && remove_dir_all::remove_dir_all(path).is_err() {
             eprintln!(
                 "Warning: failed to recursively remove directory \"{}\".",
                 path.display()
